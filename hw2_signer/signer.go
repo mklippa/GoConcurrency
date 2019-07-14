@@ -46,8 +46,16 @@ var CombineResults job = func(in, out chan interface{}) {
 }
 
 var SingleHash job = func(in, out chan interface{}) {
-	data, _ := (<-in).(string)
-	out <- DataSignerCrc32(data) + "~" + DataSignerCrc32(DataSignerMd5(data))
+	for val := range in {
+		data, _ := val.(string)
+
+		crc32md5 := make(chan string, 1)
+		go func(res chan<- string) {
+			res <- DataSignerCrc32(DataSignerMd5(data))
+		}(crc32md5)
+
+		out <- DataSignerCrc32(data) + "~" + (<-crc32md5)
+	}
 }
 
 var MultiHash job = func(in, out chan interface{}) {
