@@ -1,11 +1,13 @@
 package main
 
 import (
+	"fmt"
 	"runtime"
 	"sort"
 	"strconv"
 	"strings"
 	"sync"
+	"time"
 )
 
 // сюда писать код
@@ -34,35 +36,55 @@ func ExecutePipeline(jobs ...job) {
 
 var CombineResults job = func(in, out chan interface{}) {
 	result := make([]string, 0)
-	for {
-		select {
-		case d := <-in:
-			data, _ := d.(string)
-			result = append(result, data)
-		}
+	for val := range in {
+		data, _ := val.(string)
+		result = append(result, data)
 	}
+	start := time.Now()
 	sort.Strings(result)
+	end := time.Since(start)
+	fmt.Println(end)
 	out <- strings.Join(result, "_")
 }
 
 var SingleHash job = func(in, out chan interface{}) {
 	for val := range in {
-		data, _ := val.(string)
+		start := time.Now()
+		data := strconv.Itoa(val.(int))
 
 		crc32md5 := make(chan string, 1)
 		go func(res chan<- string) {
 			res <- DataSignerCrc32(DataSignerMd5(data))
 		}(crc32md5)
+		result := DataSignerCrc32(data) + "~" + (<-crc32md5)
 
-		out <- DataSignerCrc32(data) + "~" + (<-crc32md5)
+		end := time.Since(start)
+		fmt.Println(data, "SingleHash: ", end)
+		out <- result
 	}
 }
 
 var MultiHash job = func(in, out chan interface{}) {
-	data, _ := (<-in).(string)
-	var result string
-	for i := 0; i <= 5; i++ {
-		result += DataSignerCrc32(strconv.Itoa(i) + data)
+	for val := range in {
+		start := time.Now()
+
+		data, _ := val.(string)
+
+		res := [6]string{}
+		wg := &sync.WaitGroup{}
+		for i := 0; i < 6; i++ {
+			wg.Add(1)
+			go func(i int) {
+				res[i] = DataSignerCrc32(strconv.Itoa(i) + data)
+				wg.Done()
+			}(i)
+		}
+		wg.Wait()
+
+		result := strings.Join(res[:], "")
+
+		end := time.Since(start)
+		fmt.Println(data, "MultiHash: ", end)
+		out <- result
 	}
-	out <- result
 }
