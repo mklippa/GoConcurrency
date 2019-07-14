@@ -17,20 +17,13 @@ func ExecutePipeline(jobs ...job) {
 	in := make(chan interface{}, 100)
 	out := make(chan interface{}, 100)
 
-	jobs[0](in, out)
-	close(out)
-
-	// wg := &sync.WaitGroup{}
-	for i := 1; i < len(jobs); i++ {
-		// wg.Add(1)
+	for i := 0; i < len(jobs); i++ {
 		go func(i int, in, out chan interface{}) {
-			// defer wg.Done()
 			in, out = out, make(chan interface{}, 100)
 			jobs[i](in, out)
 			close(out)
 		}(i, in, out)
 	}
-	// wg.Done()
 }
 
 var CombineResults job = func(in, out chan interface{}) {
