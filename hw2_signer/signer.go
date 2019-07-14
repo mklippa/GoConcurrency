@@ -5,6 +5,7 @@ import (
 	"sort"
 	"strconv"
 	"strings"
+	"sync"
 )
 
 // сюда писать код
@@ -14,16 +15,21 @@ func main() {
 }
 
 func ExecutePipeline(jobs ...job) {
-	in := make(chan interface{}, 100)
-	out := make(chan interface{}, 100)
+	in := make(chan interface{})
+	out := make(chan interface{})
 
+	wg := &sync.WaitGroup{}
 	for i := 0; i < len(jobs); i++ {
+		in, out = out, make(chan interface{})
+		wg.Add(1)
 		go func(i int, in, out chan interface{}) {
-			in, out = out, make(chan interface{}, 100)
 			jobs[i](in, out)
 			close(out)
+			wg.Done()
 		}(i, in, out)
 	}
+
+	wg.Wait()
 }
 
 var CombineResults job = func(in, out chan interface{}) {
