@@ -5,7 +5,6 @@ import (
 	"sort"
 	"strconv"
 	"strings"
-	"sync"
 )
 
 // сюда писать код
@@ -15,18 +14,18 @@ func main() {
 }
 
 func ExecutePipeline(jobs ...job) {
-	wg := &sync.WaitGroup{}
-	in := make(chan interface{}, 0)
-	out := make(chan interface{}, 0)
-	for _, j := range jobs {
-		wg.Add(1)
-		go func(worker job, inCh, outCh chan interface{}) {
-			worker(inCh, outCh)
-			runtime.Gosched()
-			wg.Done()
-		}(j, in, out)
+	in := make(chan interface{})
+	out := make(chan interface{})
+
+	for i := 1; i < len(jobs); i++ {
+		if i%2 == 0 {
+			go jobs[i](in, out)
+		} else {
+			go jobs[i](out, in)
+		}
 	}
-	wg.Done()
+
+	jobs[0](in, out)
 }
 
 var CombineResults job = func(in, out chan interface{}) {
@@ -43,21 +42,15 @@ var CombineResults job = func(in, out chan interface{}) {
 }
 
 var SingleHash job = func(in, out chan interface{}) {
-	for d := range in {
-		data, _ := d.(string)
-		go func(data string) {
-			out <- DataSignerCrc32(data) + "~" + DataSignerCrc32(DataSignerMd5(data))
-		}(data)
-	}
+	data, _ := (<-in).(string)
+	out <- DataSignerCrc32(data) + "~" + DataSignerCrc32(DataSignerMd5(data))
 }
 
 var MultiHash job = func(in, out chan interface{}) {
-	for d := range in {
-		data, _ := d.(string)
-		var result string
-		for i := 0; i <= 5; i++ {
-			result += DataSignerCrc32(strconv.Itoa(i) + data)
-		}
-		out <- result
+	data, _ := (<-in).(string)
+	var result string
+	for i := 0; i <= 5; i++ {
+		result += DataSignerCrc32(strconv.Itoa(i) + data)
 	}
+	out <- result
 }
