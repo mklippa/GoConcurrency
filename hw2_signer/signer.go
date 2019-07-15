@@ -32,6 +32,8 @@ func ExecutePipeline(jobs ...job) {
 	}
 
 	wg.Wait()
+
+	time.Sleep(time.Second)
 }
 
 var CombineResults job = func(in, out chan interface{}) {
@@ -47,20 +49,26 @@ var CombineResults job = func(in, out chan interface{}) {
 	out <- strings.Join(result, "_")
 }
 
+var mu = &sync.Mutex{}
+
 var SingleHash job = func(in, out chan interface{}) {
 	for val := range in {
-		start := time.Now()
 		data := strconv.Itoa(val.(int))
+		go func() {
+			start := time.Now()
 
-		crc32md5 := make(chan string, 1)
-		go func(res chan<- string) {
-			res <- DataSignerCrc32(DataSignerMd5(data))
-		}(crc32md5)
-		result := DataSignerCrc32(data) + "~" + (<-crc32md5)
+			crc32md5 := make(chan string, 1)
+			go func(res chan<- string) {
+				mu.Lock()
+				res <- DataSignerCrc32(DataSignerMd5(data))
+				mu.Unlock()
+			}(crc32md5)
+			result := DataSignerCrc32(data) + "~" + (<-crc32md5)
 
-		end := time.Since(start)
-		fmt.Println(data, "SingleHash: ", end)
-		out <- result
+			end := time.Since(start)
+			fmt.Println(data, "SingleHash: ", end)
+			out <- result
+		}()
 	}
 }
 
