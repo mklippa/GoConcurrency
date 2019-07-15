@@ -17,21 +17,62 @@ func main() {
 }
 
 func ExecutePipeline(jobs ...job) {
-	in := make(chan interface{})
-	out := make(chan interface{})
-
-	wg := &sync.WaitGroup{}
-	for i := 0; i < len(jobs); i++ {
-		in, out = out, make(chan interface{})
-		wg.Add(1)
-		go func(i int, in, out chan interface{}) {
-			jobs[i](in, out)
+	gen := func() chan interface{} {
+		out := make(chan interface{})
+		go func() {
+			jobs[0](nil, out)
 			close(out)
-			wg.Done()
-		}(i, in, out)
+		}()
+		return out
 	}
 
-	wg.Wait()
+	in := gen()
+
+	calc := func(i int, in chan interface{}) chan interface{} {
+		out := make(chan interface{})
+		go func() {
+			jobs[i](in, out)
+			close(out)
+		}()
+		return out
+	}
+
+	outs := make([]chan interface{}, 0)
+	for i := 0; i < 100; i++ {
+		out := in
+		for j := 1; j < len(jobs)-1; j++ {
+			out = calc(j, out)
+		}
+		outs = append(outs, out)
+	}
+
+	merge := func(cs ...chan interface{}) chan interface{} {
+		var wg sync.WaitGroup
+		out := make(chan interface{})
+
+		// Start an output goroutine for each input channel in cs.  output
+		// copies values from c to out until c is closed, then calls wg.Done.
+		output := func(c <-chan interface{}) {
+			for n := range c {
+				out <- n
+			}
+			wg.Done()
+		}
+		wg.Add(len(cs))
+		for _, c := range cs {
+			go output(c)
+		}
+
+		// Start a goroutine to close out once all the output goroutines are
+		// done.  This must start after the wg.Add call.
+		go func() {
+			wg.Wait()
+			close(out)
+		}()
+		return out
+	}
+
+	jobs[len(jobs)-1](merge(outs...), nil)
 }
 
 var CombineResults job = func(in, out chan interface{}) {
@@ -47,6 +88,8 @@ var CombineResults job = func(in, out chan interface{}) {
 	out <- strings.Join(result, "_")
 }
 
+var mu = &sync.Mutex{}
+
 var SingleHash job = func(in, out chan interface{}) {
 	for val := range in {
 		start := time.Now()
@@ -54,7 +97,10 @@ var SingleHash job = func(in, out chan interface{}) {
 
 		crc32md5 := make(chan string, 1)
 		go func(res chan<- string) {
-			res <- DataSignerCrc32(DataSignerMd5(data))
+			mu.Lock()
+			md5 := DataSignerMd5(data)
+			mu.Unlock()
+			res <- DataSignerCrc32(md5)
 		}(crc32md5)
 		result := DataSignerCrc32(data) + "~" + (<-crc32md5)
 
