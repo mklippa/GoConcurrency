@@ -72,7 +72,8 @@ func ExecutePipeline(jobs ...job) {
 		return out
 	}
 
-	jobs[len(jobs)-1](merge(outs...), nil)
+	res := merge(outs...)
+	jobs[len(jobs)-1](res, nil)
 }
 
 var CombineResults job = func(in, out chan interface{}) {
@@ -105,7 +106,7 @@ var SingleHash job = func(in, out chan interface{}) {
 		result := DataSignerCrc32(data) + "~" + (<-crc32md5)
 
 		end := time.Since(start)
-		fmt.Println(data, "SingleHash: ", end)
+		fmt.Println(data, "SingleHash: ", end, result)
 		out <- result
 	}
 }
