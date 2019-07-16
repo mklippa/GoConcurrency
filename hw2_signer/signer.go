@@ -1,20 +1,17 @@
 package main
 
 import (
-	"fmt"
-	"runtime"
+	// "fmt"
+	// "runtime"
 	"sort"
 	"strconv"
 	"strings"
 	"sync"
-	"time"
+	// "time"
 )
 
 // сюда писать код
-func main() {
-	runtime.GOMAXPROCS(0)
-	// fmt.Println(CombineResults(MultiHash(SingleHash("0")), MultiHash(SingleHash("1"))))
-}
+func main(){}
 
 func ExecutePipeline(jobs ...job) {
 	in := make(chan interface{})
@@ -32,8 +29,6 @@ func ExecutePipeline(jobs ...job) {
 	}
 
 	wg.Wait()
-
-	time.Sleep(time.Second)
 }
 
 var CombineResults job = func(in, out chan interface{}) {
@@ -42,10 +37,10 @@ var CombineResults job = func(in, out chan interface{}) {
 		data, _ := val.(string)
 		result = append(result, data)
 	}
-	start := time.Now()
+	// start := time.Now()
 	sort.Strings(result)
-	end := time.Since(start)
-	fmt.Println(end)
+	// end := time.Since(start)
+	// fmt.Println(end)
 	out <- strings.Join(result, "_")
 }
 
@@ -53,7 +48,7 @@ var SingleHash job = func(in, out chan interface{}) {
 	wg := &sync.WaitGroup{}
 	mu := &sync.Mutex{}
 	internalOut := make(chan interface{}, 100)
-	start := time.Now()
+	// start := time.Now()
 	for val := range in {
 		data := strconv.Itoa(val.(int))
 		wg.Add(1)
@@ -72,8 +67,8 @@ var SingleHash job = func(in, out chan interface{}) {
 	}
 	wg.Wait()
 	close(internalOut)
-	end := time.Since(start)
-	fmt.Println(end)
+	// end := time.Since(start)
+	// fmt.Println(end)
 	for r := range internalOut {
 		out <- r
 	}
@@ -81,7 +76,7 @@ var SingleHash job = func(in, out chan interface{}) {
 
 var MultiHash job = func(in, out chan interface{}) {
 	wg1 := &sync.WaitGroup{}
-	start := time.Now()
+	// start := time.Now()
 	internalOut := make(chan interface{}, 100)
 	for val := range in {
 		data := val.(string)
@@ -103,8 +98,8 @@ var MultiHash job = func(in, out chan interface{}) {
 	}
 	wg1.Wait()
 	close(internalOut)
-	end := time.Since(start)
-	fmt.Println(end)
+	// end := time.Since(start)
+	// fmt.Println(end)
 	for r := range internalOut {
 		out <- r
 	}
