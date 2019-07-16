@@ -52,10 +52,13 @@ var CombineResults job = func(in, out chan interface{}) {
 var mu = &sync.Mutex{}
 
 var SingleHash job = func(in, out chan interface{}) {
+	wg := &sync.WaitGroup{}
+	internalOut := make(chan interface{}, 100)
+	start := time.Now()
 	for val := range in {
 		data := strconv.Itoa(val.(int))
+		wg.Add(1)
 		go func() {
-			start := time.Now()
 
 			crc32md5 := make(chan string, 1)
 			go func(res chan<- string) {
@@ -63,12 +66,17 @@ var SingleHash job = func(in, out chan interface{}) {
 				res <- DataSignerCrc32(DataSignerMd5(data))
 				mu.Unlock()
 			}(crc32md5)
-			result := DataSignerCrc32(data) + "~" + (<-crc32md5)
 
-			end := time.Since(start)
-			fmt.Println(data, "SingleHash: ", end)
-			out <- result
+			internalOut <- DataSignerCrc32(data) + "~" + (<-crc32md5)
+			wg.Done()
 		}()
+	}
+	wg.Wait()
+	close(internalOut)
+	end := time.Since(start)
+	fmt.Println(end)
+	for r := range internalOut {
+		out <- r
 	}
 }
 
