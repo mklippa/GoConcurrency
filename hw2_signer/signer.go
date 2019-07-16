@@ -49,17 +49,15 @@ var CombineResults job = func(in, out chan interface{}) {
 	out <- strings.Join(result, "_")
 }
 
-var mu = &sync.Mutex{}
-
 var SingleHash job = func(in, out chan interface{}) {
 	wg := &sync.WaitGroup{}
+	mu := &sync.Mutex{}
 	internalOut := make(chan interface{}, 100)
 	start := time.Now()
 	for val := range in {
 		data := strconv.Itoa(val.(int))
 		wg.Add(1)
 		go func() {
-
 			crc32md5 := make(chan string, 1)
 			go func(res chan<- string) {
 				mu.Lock()
@@ -81,26 +79,32 @@ var SingleHash job = func(in, out chan interface{}) {
 }
 
 var MultiHash job = func(in, out chan interface{}) {
+	wg1 := &sync.WaitGroup{}
+	start := time.Now()
+	internalOut := make(chan interface{}, 100)
 	for val := range in {
-		start := time.Now()
-
-		data, _ := val.(string)
-
-		res := [6]string{}
-		wg := &sync.WaitGroup{}
-		for i := 0; i < 6; i++ {
-			wg.Add(1)
-			go func(i int) {
-				res[i] = DataSignerCrc32(strconv.Itoa(i) + data)
-				wg.Done()
-			}(i)
-		}
-		wg.Wait()
-
-		result := strings.Join(res[:], "")
-
-		end := time.Since(start)
-		fmt.Println(data, "MultiHash: ", end)
-		out <- result
+		data := val.(string)
+		wg1.Add(1)
+		go func() {
+			res := [6]string{}
+			wg2 := &sync.WaitGroup{}
+			for i := 0; i < 6; i++ {
+				wg2.Add(1)
+				go func(i int) {
+					res[i] = DataSignerCrc32(strconv.Itoa(i) + data)
+					wg2.Done()
+				}(i)
+			}
+			wg2.Wait()
+			internalOut <- strings.Join(res[:], "")
+			wg1.Done()
+		}()
+	}
+	wg1.Wait()
+	close(internalOut)
+	end := time.Since(start)
+	fmt.Println(end)
+	for r := range internalOut {
+		out <- r
 	}
 }
