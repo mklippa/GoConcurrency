@@ -58,14 +58,15 @@ var SingleHash job = func(in, out chan interface{}) {
 		data := strconv.Itoa(val.(int))
 		wg.Add(1)
 		go func() {
-			md5 := make(chan string, 1)
+			crc32md5 := make(chan string, 1)
 			go func(res chan<- string) {
 				mu.Lock()
-				res <- DataSignerMd5(data)
+				md5 := DataSignerMd5(data)
 				mu.Unlock()
-			}(md5)
+				res <- DataSignerCrc32(md5)
+			}(crc32md5)
 
-			internalOut <- DataSignerCrc32(data) + "~" + DataSignerCrc32(<-md5)
+			internalOut <- DataSignerCrc32(data) + "~" + (<-crc32md5)
 			wg.Done()
 		}()
 	}
