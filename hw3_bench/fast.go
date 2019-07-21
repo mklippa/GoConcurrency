@@ -5,7 +5,6 @@ import (
 	"io"
 	"io/ioutil"
 	"os"
-	"regexp"
 	"strings"
 
 	"github.com/mailru/easyjson/jlexer"
@@ -24,62 +23,30 @@ func FastSearch(out io.Writer) {
 		panic(err)
 	}
 
-	r := regexp.MustCompile("@")
-	seenBrowsers := []string{}
-	uniqueBrowsers := 0
+	seenBrowsers := make(map[string]bool)
 	foundUsers := ""
 
 	lines := strings.Split(string(fileContents), "\n")
+	var user User
 
-	users := make([]User, 0)
-	for _, line := range lines {
-		var user User
+	for i, line := range lines {
 		// fmt.Printf("%v %v\n", err, line)
 		err := user.UnmarshalJSON([]byte(line))
 		if err != nil {
 			panic(err)
 		}
-		users = append(users, user)
-	}
-
-	for i, user := range users {
 
 		isAndroid := false
 		isMSIE := false
 
 		for _, browser := range user.Browsers {
-
-			if ok := strings.Contains(browser, "Android"); ok {
+			if strings.Contains(browser, "Android") {
 				isAndroid = true
-				notSeenBefore := true
-				for _, item := range seenBrowsers {
-					if item == browser {
-						notSeenBefore = false
-					}
-				}
-				if notSeenBefore {
-					// log.Printf("SLOW New browser: %s, first seen: %s", browser, user["name"])
-					seenBrowsers = append(seenBrowsers, browser)
-					uniqueBrowsers++
-				}
+				seenBrowsers[browser] = true
 			}
-		}
-
-		for _, browser := range user.Browsers {
-
-			if ok := strings.Contains(browser, "MSIE"); ok {
+			if strings.Contains(browser, "MSIE") {
 				isMSIE = true
-				notSeenBefore := true
-				for _, item := range seenBrowsers {
-					if item == browser {
-						notSeenBefore = false
-					}
-				}
-				if notSeenBefore {
-					// log.Printf("SLOW New browser: %s, first seen: %s", browser, user["name"])
-					seenBrowsers = append(seenBrowsers, browser)
-					uniqueBrowsers++
-				}
+				seenBrowsers[browser] = true
 			}
 		}
 
@@ -88,7 +55,7 @@ func FastSearch(out io.Writer) {
 		}
 
 		// log.Println("Android and MSIE user:", user["name"], user["email"])
-		email := r.ReplaceAllString(user.Email, " [at] ")
+		email := strings.Replace(user.Email, "@", " [at] ", 1)
 		foundUsers += fmt.Sprintf("[%d] %s <%s>\n", i, user.Name, email)
 	}
 
