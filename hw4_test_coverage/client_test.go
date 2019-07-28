@@ -81,12 +81,6 @@ func (a ByNameDesc) Less(i, j int) bool {
 }
 
 func SearchServer(w http.ResponseWriter, r *http.Request) {
-	// ✔ вернуть код не авторизован
-	// при ошибках возвращать Internal Error
-	// ✔ 1 bad request - при неудачных параметрах
-	// ✔ 1.1 bad order field как Error
-	// from >= to
-
 	// авторизация
 	if r.Header.Get("AccessToken") != "test" {
 		w.WriteHeader(http.StatusUnauthorized)
@@ -212,3 +206,25 @@ func TestSearchServer(t *testing.T) {
 
 	ts.Close()
 }
+
+/*
+Тест-кейсы:
+	- limit < 0 -> error
+	- limit > 25 -> return 25 items
+	- offset < 0 -> error
+	- (?) limit is not int -> panic
+	- (?) offset is not int -> panic
+	- (?) order_by is not int -> panic
+	- token is not eq "test" -> auth error
+	- request timeout error (alter. token(?))
+	- unknown error
+	- one of internal error
+	- can't unpack dad request response
+	- bad order field
+	- unknown bad request (bad order by ?)
+	- can't unpack result json
+	- resp len == limit -> next page == true
+	- (?) resp len == limit -> resp OK
+	- resp len <> limit -> next page == false
+	- postitive case
+*/
