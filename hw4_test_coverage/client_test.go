@@ -1,7 +1,9 @@
 package main
 
 import (
+	"encoding/json"
 	"encoding/xml"
+	"io"
 	"io/ioutil"
 	"net/http"
 	"net/http/httptest"
@@ -79,20 +81,40 @@ func (a ByNameDesc) Less(i, j int) bool {
 }
 
 func SearchServer(w http.ResponseWriter, r *http.Request) {
-	// распарсить запросу
+	// ✔ вернуть код не авторизован
+	// при ошибках возвращать Internal Error
+	// ✔ 1 bad request - при неудачных параметрах
+	// ✔ 1.1 bad order field как Error
+	// from >= to
+
+	// авторизация
+	if r.Header.Get("AccessToken") != "test" {
+		w.WriteHeader(http.StatusUnauthorized)
+		return
+	}
+
+	// получение параметров
 	limit, _ := strconv.Atoi(r.FormValue("limit"))
 	offset, _ := strconv.Atoi(r.FormValue("offset"))
 	query := r.FormValue("query")
 	orderField := r.FormValue("order_field")
 	orderBy, _ := strconv.Atoi("order_by")
 
-	// распарсить
-	dataset, _ := ioutil.ReadFile("dataset.xml")
+	// парсинг данных
+	dataset, err := ioutil.ReadFile("dataset.xml")
+	if err != nil {
+		w.WriteHeader(http.StatusInternalServerError)
+		return
+	}
 
 	root := new(Root)
-	xml.Unmarshal(dataset, &root)
+	err = xml.Unmarshal(dataset, &root)
+	if err != nil {
+		w.WriteHeader(http.StatusInternalServerError)
+		return
+	}
 
-	// отфильтровать
+	// фильтрация
 	rows := make([]Row, 0)
 	if query != "" {
 		for _, row := range root.Rows {
@@ -104,33 +126,78 @@ func SearchServer(w http.ResponseWriter, r *http.Request) {
 		rows = root.Rows
 	}
 
-	// отсортировать
+	// сортировка
 	if orderField == "Id" {
-		if orderBy == -1 {
+		if orderBy == OrderByAsc {
 			sort.Sort(ByIdAsc(rows))
-		} else if orderBy == 1 {
+		} else if orderBy == OrderByDesc {
 			sort.Sort(ByIdDesc(rows))
+		} else if orderBy == OrderByAsIs {
+		} else {
+			w.WriteHeader(http.StatusBadRequest)
+			io.WriteString(w, `{"Error": "ErrorBadOrderBy"}`)
+			return
 		}
 	} else if orderField == "Age" {
-		if orderBy == -1 {
+		if orderBy == OrderByAsc {
 			sort.Sort(ByAgeAsc(rows))
-		} else if orderBy == 1 {
+		} else if orderBy == OrderByDesc {
 			sort.Sort(ByAgeDesc(rows))
+		} else if orderBy == OrderByAsIs {
+		} else {
+			w.WriteHeader(http.StatusBadRequest)
+			io.WriteString(w, `{"Error": "ErrorBadOrderBy"}`)
+			return
 		}
 	} else if orderField == "Name" || orderField == "" {
-		if orderBy == -1 {
+		if orderBy == OrderByAsc {
 			sort.Sort(ByNameAsc(rows))
-		} else if orderBy == 1 {
+		} else if orderBy == OrderByDesc {
 			sort.Sort(ByNameDesc(rows))
+		} else if orderBy == OrderByAsIs {
+		} else {
+			w.WriteHeader(http.StatusBadRequest)
+			io.WriteString(w, `{"Error": "ErrorBadOrderBy"}`)
+			return
 		}
 	} else {
-		// вернуть ошибку
+		w.WriteHeader(http.StatusBadRequest)
+		io.WriteString(w, `{"Error": "ErrorBadOrderField"}`)
+		return
 	}
 
-	// отрезать
-	result := rows[offset : offset+limit]
+	// пагинация
+	if offset >= len(rows) {
+		w.WriteHeader(http.StatusBadRequest)
+		io.WriteString(w, `{"Error": "OffsetOutOfRange"}`)
+		return
+	}
+	last := offset + limit
+	if last > len(rows) {
+		last = len(rows)
+	}
+	rows = rows[offset:last]
 
-	// вернуть результат
+	// ответ
+	result := make([]User, 0)
+	for _, row := range rows {
+		user := User{
+			Id:     row.ID,
+			Name:   row.FirstName + row.LastName,
+			Gender: row.Gender,
+			Age:    row.Age,
+			About:  row.About,
+		}
+		result = append(result, user)
+	}
+
+	s, err := json.Marshal(result)
+	if err != nil {
+		w.WriteHeader(http.StatusInternalServerError)
+		return
+	}
+	w.WriteHeader(http.StatusOK)
+	io.WriteString(w, string(s))
 }
 
 func TestSearchServer(t *testing.T) {
